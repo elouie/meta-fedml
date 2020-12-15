@@ -21,3 +21,9 @@ def build_categorical_model_fn(model_builder, dataset):
             loss=losses.CategoricalCrossentropy(),
             metrics=[metrics.CategoricalCrossentropy(), metrics.CategoricalAccuracy()])
     return model_fn
+
+
+def save_checkpoint(model_builder, state, path):
+    temp_model = model_builder()
+    state.model.assign_weights_to(temp_model)
+    temp_model.save(path)

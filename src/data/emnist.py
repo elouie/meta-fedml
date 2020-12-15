@@ -1,4 +1,5 @@
 import random
+import numpy as np
 import tensorflow as tf
 import tensorflow_federated as tff
 
@@ -15,7 +16,7 @@ def encode_element(x):
 
 
 def encode_dataset(dataset, batch):
-    return dataset.shuffle(2*batch) \
+    return dataset.shuffle(2*batch, reshuffle_each_iteration=True) \
         .batch(batch, drop_remainder=True) \
         .map(encode_element, num_parallel_calls=4) \
         .prefetch(1)
@@ -31,26 +32,28 @@ def load_flattened_dataset(batch):
 
 
 def make_federated_data(train_data, test_data, batch):
-    # Really, a fixed set of partitioned client ids needs to exist.
     print("Beginning dataset generation.", flush=True)
-    client_ids = train_data.client_ids
-    random.seed(0)
-    random.shuffle(client_ids)
-    train_dataset = None
-    test_dataset = None
+    # A pregenerated list of clients into 30 (roughly even) splits.
+    # We can't use the full split as TFF is _really slow_ with large numbers of
+    # clients in simulation.
+    client_ids_split = np.load("test_split.npy", allow_pickle=True)
     train_datasets = []
+    train_sizes = []
     test_datasets = []
-    for i, cid in enumerate(client_ids):
-        if i % 50 == 0:
-            if train_dataset is not None:
-                train_datasets.append(train_dataset)
-                test_datasets.append(test_dataset)
-            train_dataset = encode_dataset(train_data.create_tf_dataset_for_client(cid), batch)
-            test_dataset = encode_dataset(test_data.create_tf_dataset_for_client(cid), batch)
-        else:
-            train_dataset.concatenate(encode_dataset(train_data.create_tf_dataset_for_client(cid), batch))
-            test_dataset.concatenate(encode_dataset(test_data.create_tf_dataset_for_client(cid), batch))
-    return train_datasets, test_datasets
+    test_sizes = []
+    for client_ids in client_ids_split:
+        train_dataset = train_data.create_tf_dataset_for_client(client_ids[0])
+        test_dataset = test_data.create_tf_dataset_for_client(client_ids[0])
+        for i in range(1, len(client_ids)):
+            train_dataset = train_dataset.concatenate(train_data.create_tf_dataset_for_client(client_ids[i]))
+            test_dataset = test_dataset.concatenate(test_data.create_tf_dataset_for_client(client_ids[i]))
+        train_datasets.append(encode_dataset(train_dataset, batch))
+        test_datasets.append(encode_dataset(test_dataset, batch))
+        train_sizes.append(len(train_dataset))
+        test_sizes.append(len(test_dataset))
+    val_dataset = encode_dataset(test_data.create_tf_dataset_from_all_clients(), batch)
+    val_size = get_dataset_size(test_data)
+    return train_datasets, train_sizes, test_datasets, test_sizes, val_dataset, val_size
 
 
 def load_federated_dataset(batch):
