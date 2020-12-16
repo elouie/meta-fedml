@@ -1,4 +1,4 @@
-import random
+import math
 import numpy as np
 import tensorflow as tf
 import tensorflow_federated as tff
@@ -24,11 +24,12 @@ def encode_dataset(dataset, batch):
 
 def load_flattened_dataset(batch):
     emnist_train, emnist_test = tff.simulation.datasets.emnist.load_data()
-    onehot_train = encode_dataset(emnist_train.create_tf_dataset_from_all_clients())
-    onehot_test = encode_dataset(emnist_test.create_tf_dataset_from_all_clients())
-    train_size = get_dataset_size(emnist_train)
-    test_size = get_dataset_size(emnist_test)
-    return (onehot_train, train_size), (onehot_test, test_size)
+    client_id = emnist_train.client_ids[0]
+    onehot_train = encode_dataset(emnist_train.create_tf_dataset_from_all_clients(), batch)
+    onehot_test = encode_dataset(emnist_test.create_tf_dataset_from_all_clients(), batch)
+    train_size = math.floor(get_dataset_size(emnist_train)/batch)
+    test_size = math.floor(get_dataset_size(emnist_test)/batch)
+    return onehot_train, train_size, onehot_test, test_size
 
 
 def make_federated_data(train_data, test_data, batch):
@@ -36,7 +37,7 @@ def make_federated_data(train_data, test_data, batch):
     # A pregenerated list of clients into 30 (roughly even) splits.
     # We can't use the full split as TFF is _really slow_ with large numbers of
     # clients in simulation.
-    client_ids_split = np.load("test_split.npy", allow_pickle=True)
+    client_ids_split = np.load("src/data/test_split.npy", allow_pickle=True)
     train_datasets = []
     train_sizes = []
     test_datasets = []
@@ -49,8 +50,8 @@ def make_federated_data(train_data, test_data, batch):
             test_dataset = test_dataset.concatenate(test_data.create_tf_dataset_for_client(client_ids[i]))
         train_datasets.append(encode_dataset(train_dataset, batch))
         test_datasets.append(encode_dataset(test_dataset, batch))
-        train_sizes.append(len(train_dataset))
-        test_sizes.append(len(test_dataset))
+        train_sizes.append(math.floor(len(train_dataset)/batch))
+        test_sizes.append(math.floor(len(test_dataset)/batch))
     val_dataset = encode_dataset(test_data.create_tf_dataset_from_all_clients(), batch)
     val_size = get_dataset_size(test_data)
     return train_datasets, train_sizes, test_datasets, test_sizes, val_dataset, val_size

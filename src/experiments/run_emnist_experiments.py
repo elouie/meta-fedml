@@ -1,0 +1,8 @@
+from src.experiments.emnist_global import run_global_emnist_experiment
+from src.experiments.emnist_fedavg import run_fedavg_emnist_experiment
+
+run_global_emnist_experiment()
+run_fedavg_emnist_experiment()
+run_fedavg_emnist_experiment(repeats=2)
+run_fedavg_emnist_experiment(repeats=5)
+run_fedavg_emnist_experiment(repeats=10)
